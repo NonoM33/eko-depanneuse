@@ -4,7 +4,9 @@ RUN apk add --no-cache libc6-compat
 WORKDIR /app
 RUN npm install -g pnpm
 COPY package.json pnpm-lock.yaml* pnpm-workspace.yaml* ./
-RUN pnpm install --frozen-lockfile
+COPY .npmrc* ./
+RUN echo "node-linker=hoisted" > .npmrc
+RUN pnpm install --frozen-lockfile || pnpm install
 
 # Stage 2: Builder
 FROM node:20-alpine AS builder
@@ -15,8 +17,6 @@ COPY . .
 ENV DATABASE_URL="postgresql://fake:fake@localhost:5432/fake"
 RUN pnpm prisma generate
 RUN pnpm build
-# Compile seed to JS
-RUN npx tsx --compile prisma/seed.ts > /dev/null 2>&1 || true
 
 # Stage 3: Runner
 FROM node:20-alpine AS runner
@@ -25,7 +25,7 @@ WORKDIR /app
 ENV NODE_ENV=production
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
-RUN npm install -g prisma @prisma/client
+RUN npm install -g prisma
 
 COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
